@@ -17,7 +17,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 
-thresholds =[85]
+ngram_thresholds =[75, 85]
 
 dict_path = "dictionary.tsv"
 #dict_path = "C:\develop\DataScienceMaster\Translate\data\gangslang.tsv"
@@ -56,10 +56,11 @@ class phraseLabel :
          return hash((self.label,self.pos))
 
 class Match(object):
-    def __init__(self, candidate, dict_term, definition):
+    def __init__(self, candidate, dict_term, definition, threshold):
         self.candidate=candidate
         self.dict_term=dict_term
         self.definition=definition
+        self.thresh = threshold
 
 def get_threshold (term, l):
     threshold=80
@@ -97,7 +98,7 @@ def search_dictionary(targets, d):
      threshold = get_threshold(target, 1)
      for entry, definition in d.items():   
        if (fuzz.ratio(target, entry) > threshold ): 
-          match = Match(target, entry, definition)
+          match = Match(target, entry, definition, threshold)
           likely_matches.append(match)
    return (likely_matches)
 
@@ -200,9 +201,9 @@ def fuzzy_label(str_a, str_b, orig_str):
     extent = (len(splitted)-l+1) 
     while (i < extent and test):
         test = clean_term(" ".join(splitted[i:i+l])).lower()  
-        for thresh in thresholds:
+        for thresh in ngram_thresholds:
           if fuzz.ratio(str_a, test)> thresh:
-            label = phraseLabel(str_a, orig_str.index(test), l, str_b, test, thresh)
+            label = phraseLabel(str_a, orig_str.index(test), len(test), str_b, test, thresh)
             if check_samelabels(label, labels) == False:
                  labels.append(label)
         i=i+1
@@ -244,7 +245,7 @@ def collect_unigrams(text):
     if bool(matches): 
       for m in matches:
           index=get_index(m.candidate,s)
-          label=phraseLabel (m.dict_term, index, len(m.candidate), m.definition, m.candidate, 85 )
+          label=phraseLabel (m.dict_term, index, len(m.candidate), m.definition, m.candidate, m.thresh )
           all_labels.append(label)
     else:
         continue;
@@ -258,5 +259,7 @@ all_labels = []
 first =  (collect_ngrams(text))
 second = json.loads(collect_unigrams(text))
 
-print(second)
+print json.dumps(second, indent=2, sort_keys=True) 
+
+
 
