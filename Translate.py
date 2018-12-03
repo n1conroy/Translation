@@ -11,6 +11,9 @@ from gensim.test.utils import common_texts, get_tmpfile
 from gensim.models import Word2Vec
 from nltk.corpus import stopwords
 from ppretty import ppretty
+from Tkinter import *
+window = Tk()
+from HoverInfo import HoverInfo
 #import enchant
 
 import warnings
@@ -259,7 +262,13 @@ all_labels = []
 first =  (collect_ngrams(text))
 second = json.loads(collect_unigrams(text))
 
-print json.dumps(second, indent=2, sort_keys=True) 
+window.geometry('300x600')
+
+for l in all_labels:
+      la1=Button(window, text='TERM:'+str(l.found)+' with threshold '+str(l.thresh), bg='pink', fg='blue')
+      lstring = 'LABEL:'+str(l.label)+'\nPOSITION:'+str(l.pos)+'\nDEFINITION:'+str(l.defin) 
+      la1.bind =  HoverInfo(la1, lstring)  
+      la1.pack(fill=X, pady=7, padx=15)
 
 
-
+window.mainloop()
