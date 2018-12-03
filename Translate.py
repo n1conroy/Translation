@@ -1,6 +1,7 @@
 #!/usr/bin/python
 import csv
 import re
+import json
 import nltk
 from nltk.tokenize import word_tokenize
 from nltk.tokenize import sent_tokenize
@@ -18,7 +19,7 @@ warnings.filterwarnings("ignore")
 
 thresholds =[85]
 
-dict_path = "C:\develop\DataScienceMaster\Translate\data\dictionary.tsv"
+dict_path = "dictionary.tsv"
 #dict_path = "C:\develop\DataScienceMaster\Translate\data\gangslang.tsv"
 #englishDictionary = enchant.Dict("en_US")
 
@@ -29,12 +30,12 @@ trigram_pattern=r'^[a-zA-Z0-9\']+\s[a-zA-Z0-9\']+\s[a-zA-Z0-9\']+$'
 quadgram_pattern=r'^[a-zA-Z0-9\']+\s[a-zA-Z0-9\']+\s[a-zA-Z0-9\']+\s[a-zA-Z0-9\']+$'
 stops= set(stopwords.words('english'))
 
-file_path = "C:\develop\DataScienceMaster\Translate\data\input_text.txt"
+file_path = "input_text.txt"
 
 
-model1 = Word2Vec.load("saved_models/embeddings3.model")
+#model1 = Word2Vec.load("saved_models/embeddings.model")
 #model2 = gensim.models.KeyedVectors.load_word2vec_format('saved_models\embeddingmodel6.bin', binary=True, limit=500000)
-model2 = Word2Vec.load("saved_models/embeddings5.model")
+#model2 = Word2Vec.load("saved_models/embeddings.model")
 
 class phraseLabel :
     def __init__(self, label, pos, length, defin, found, thresh):
@@ -44,6 +45,15 @@ class phraseLabel :
         self.length = length
         self.defin = defin
         self.found = found
+    
+    def __eq__(self, other):
+        return (self.label == other.label and self.pos == other.pos and self.thresh == other.thresh)
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    def __hash__ (self):
+         return hash((self.label,self.pos))
 
 class Match(object):
     def __init__(self, candidate, dict_term, definition):
@@ -81,11 +91,11 @@ def remove_stopwords(content):
 
    return(filtered_sentence)
          
-def search_dictionary(targets, d, threshold):
+def search_dictionary(targets, d):
    likely_matches = []
    for target in targets:
      threshold = get_threshold(target, 1)
-     for entry,definition in d.items():
+     for entry, definition in d.items():   
        if (fuzz.ratio(target, entry) > threshold ): 
           match = Match(target, entry, definition)
           likely_matches.append(match)
@@ -97,12 +107,17 @@ def get_sentences(content):
 def get_words(content):
    return (nltk.word_tokenize(content))
 
+
+def get_sentence_index(s, all_text):
+    return (all_text.index(s))
+
 def get_index(term, s):
-   return (s.index(term))
+   sen= get_sentence_index(s, text)
+   return (s.find(term)+sen)
 
 def get_dictionary_unigrams():
     dict_terms ={}
-    with open(dict_path, "r", encoding="utf-8") as f:
+    with open(dict_path, "r") as f:
          reader = csv.reader(f, delimiter='\t')
          for key,value in reader:
             dict_terms[key]=value;
@@ -157,15 +172,16 @@ def merge_dictionary(x,y):
     return z
 
 def check_samelabels (new_label, labels):
-    for current_label in labels:
-        if new_label == current_label: 
-           print ("already have a label with " + current_label.label + " at position ",current_label.pos)
+    found = False
+    for current_label in labels: 
+       if new_label == current_label: 
+           print ("already have a label with " + new_label.label + " at position ",current_label.pos)
            return True
     return False
 
 def read_dictionary():
     dict_terms ={}
-    with open(dict_path, "r", encoding="utf-8") as f:
+    with open(dict_path, "r") as f:
          reader = csv.reader(f, delimiter='\t')
          for key,value in reader:
             dict_terms[key]=value;
@@ -186,56 +202,61 @@ def fuzzy_label(str_a, str_b, orig_str):
         test = clean_term(" ".join(splitted[i:i+l])).lower()  
         for thresh in thresholds:
           if fuzz.ratio(str_a, test)> thresh:
-            label = phraseLabel(str_a, i, l, str_b, test, thresh)
+            label = phraseLabel(str_a, orig_str.index(test), l, str_b, test, thresh)
             if check_samelabels(label, labels) == False:
-           	 labels.append(label)
+                 labels.append(label)
         i=i+1
     if (labels):
         return(labels)
     else:
         return(None)
 
-def collect_ngrams():
+def collect_ngrams(text):
     for s,t in dict_grams.items():
         labels = fuzzy_label(s.lower(), t, text)
         if (labels):
             all_labels.extend(labels)
     if (all_labels):
-        for l in all_labels:
-            print (ppretty(l))
+    	json_string = json.dumps([ob.__dict__ for ob in all_labels])
+   	return (json_string)
     else:
         print ("there were no known ngrams in the source text")
 
-def collect_unigrams():
+
+def collect_unigrams(text):
   for s in get_sentences(text):
-   
+    splits=(s.split(' '))
     m1_candidates=[]
     m2_candidates=[]
     sent = remove_stopwords(s)
-    print ("the sent is ",sent)
     try:
-        pred1 = get_three_predictions(model1, sent)
-        pred2 = get_three_predictions(model2, sent)
-        common =list(set(pred1).intersection(pred2))
+        #pred1 = get_three_predictions(model1, sent)
+        #pred2 = get_three_predictions(model2, sent)
+        #common =list(set(pred1).intersection(pred2))
+        common = [splits[4]]
     except Exception as e:
         print ("the error in running models: ",e)
         continue;
     if (common):
-        print ("for sentence:", s, "the words in common are ", common)
-        matches = search_dictionary(common, get_dictionary_unigrams(), thresholds)
+        matches = search_dictionary(common, get_dictionary_unigrams())
     else:
         continue;
     if bool(matches): 
       for m in matches:
-          print ("The dicionary defines ", m.dict_term, "as", m.definition)
           index=get_index(m.candidate,s)
-          #add_label(s, candidate, index, confidence, length=1)
+          label=phraseLabel (m.dict_term, index, len(m.candidate), m.definition, m.candidate, 85 )
+          all_labels.append(label)
     else:
-       print ("but, there was nothing resembling those terms found in the slang dictionary\n")
+        continue;
+  json_string = json.dumps([ob.__dict__ for ob in all_labels])
+  return(json_string)
 
-	    
+
 text= read_file()
 dict_grams = read_dictionary()
 all_labels = []
-#collect_ngrams()
-collect_unigrams()
+first =  (collect_ngrams(text))
+second = json.loads(collect_unigrams(text))
+
+print(second)
+
