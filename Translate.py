@@ -15,6 +15,7 @@ from nltk.corpus import stopwords
 from Tkinter import *  
 from nltk.corpus import words
 from random import randint
+from HoverInfo import HoverInfo
 import operator
 
 import warnings
@@ -272,20 +273,16 @@ def collect_unigrams(texts):
     sent = remove_stopwords(s)
     try:
 	sent_prev = sent
-        if (sent): pred1 = get_two_predictions(model1, sent)
-	else:
-	   print ("empty sentence - moving on!")
-        if (sent_prev):pred2 = get_two_predictions(model2, sent_prev)
-        else:
-	   print ("empty sentence - moving on!")
-	print (sent, sent_prev)
+        if (sent): 
+		pred1 = get_two_predictions(model1, sent)
+        if (sent_prev): 
+		pred2 = get_two_predictions(model2, sent_prev)
         common = list(set(pred1).intersection(pred2))
     except Exception as e:
-        print ("Error in running models: ",e)
+        print ("Error in running models: ",e, "with ", sent, sent_prev)
         continue;
-
     if (common):
-        matches = search_dictionary(common, get_dictionary_unigrams())
+	matches = search_dictionary(common, get_dictionary_unigrams())
     else:
         continue;
     if bool(matches): 
