@@ -15,7 +15,7 @@ from nltk.corpus import stopwords
 from Tkinter import *  
 from nltk.corpus import words
 from random import randint
-from HoverInfo import HoverInfo
+
 import operator
 
 import warnings
@@ -24,8 +24,8 @@ warnings.filterwarnings("ignore")
 ps = nltk.stem.SnowballStemmer('english')
 ngram_thresholds =[85]
 
-#dict_path = "C:\develop\DataScienceMaster\Translate\data\dictionary.tsv"
-dict_path = "dictionary.tsv"
+dict_path = "C:\develop\DataScienceMaster\Translate\data\dictionary.tsv"
+#dict_path = "dictionary.tsv"
 
 
 symb_pattern = r'[\<\>\{\}\.\,\!\?\"\n$]+'
@@ -35,10 +35,6 @@ bigram_pattern=r'^[a-zA-Z0-9\'\-]+\s[a-zA-Z0-9\'\-]+$'
 trigram_pattern=r'^[a-zA-Z0-9\']+\s[a-zA-Z0-9\']+\s[a-zA-Z0-9\']+$'
 quadgram_pattern=r'^[a-zA-Z0-9\']+\s[a-zA-Z0-9\']+\s[a-zA-Z0-9\']+\s[a-zA-Z0-9\']+$'
 stops= set(stopwords.words('english'))
-
-#file_path = "data/input_text.txt"
-file_path = "input_text.txt"
-
 colors=['sea green', 'maroon3', 'light salmon', 'slate blue', 'turquoise1','RoyalBlue1', 'coral', 'khaki1','ivory3','slate grey', 'yellow2', 'red3', 'purple']
 
 
@@ -118,9 +114,9 @@ def get_threshold (term, l):
 def clean_term (term):
     return (re.sub(symb_pattern,'',term))
 
-def read_file():
-  with open(file_path, 'r') as ff:
-  #with open(file_path, 'r', encoding='utf-8') as ff:
+def read_file(file_path):
+  #with open(file_path, 'r') as ff:
+  with open(file_path, 'r', encoding='utf-8') as ff:
     content = ff.read()
   ff.close()
   return(content)
@@ -166,8 +162,8 @@ def get_index(term, s):
 
 def get_dictionary_unigrams():
     dict_terms ={}
-    with open(dict_path, "r") as f:
-    #with open(dict_path, "r", encoding='utf-8') as f:
+    #with open(dict_path, "r") as f:
+    with open(dict_path, "r", encoding='utf-8') as f:
          reader = csv.reader(f, delimiter='\t')
          for key,value in reader:
             dict_terms[key]=value;
@@ -225,8 +221,8 @@ def check_samelabels (new_label, labels):
 
 def read_dictionary():
     dict_terms ={}
-    with open(dict_path, "r") as f:
-    #with open(dict_path, "r", encoding='utf-8') as f:
+    #with open(dict_path, "r") as f:
+    with open(dict_path, "r", encoding='utf-8') as f:
          reader = csv.reader(f, delimiter='\t')
          for key,value in reader:
             dict_terms[key]=value;
@@ -309,8 +305,7 @@ def collect_non_dict(texts):
         w=clean_term(w)   
         if is_English(w) == False:
            for key, val in terms.items():
-            threshold = get_threshold(key, 1)
-            if fuzz.ratio(key, w) > threshold:
+            if fuzz.ratio(key, w) > get_threshold(key, 1):
                 index = [m.start() for m in re.finditer(w, texts)]
                 for ind in index:                  
                     label = phraseLabel(key, ind, len(w), val, w, threshold)                         
@@ -331,7 +326,10 @@ def get_sentiment(sentence):
 
 
 if __name__ == "__main__":
-    texts= read_file()
+    import sys
+
+    filename = str(sys.argv[1])
+    texts= read_file(filename)
     dict_grams = read_dictionary()
     all_labels = []
     all_found_ngrams = (collect_ngrams(texts))
@@ -339,19 +337,23 @@ if __name__ == "__main__":
     all_found_noneng = (collect_non_dict(texts))
     all_labels.sort(key=operator.attrgetter("pos"),reverse=False)
 
-    if all_labels:
-      all_lab = sorted(all_labels, key=lambda l: l.pos, reverse=True)
-    if (all_found_unigrams!='There were no unigrams in the source text.'):
-      print ("The ngrams and unigrams json is ", json.loads(all_found_noneng))
-    else:
-      print (all_found_ngrams+'\n')
-      print (all_found_unigrams+'\n')
-    
+    #if the slang is less than 3% it's not useful
 
-    root = Tk()
-    root.geometry('1200x700')
-    Visual(root).pack(side="top", fill="both", expand="true")
-    root.mainloop()
+    
+    if (len (all_labels)/len(texts.split(' ')) < 0.03): 
+       all_labels=[]
+       print ("We found no slang to report")
+    else:
+       all_lab = sorted(all_labels, key=lambda l: l.pos, reverse=True)
+       root = Tk()
+       root.geometry('1200x700')
+       Visual(root).pack(side="top", fill="both", expand="true")
+       root.mainloop()
+       if (all_found_unigrams!='There were no unigrams in the source text.'):
+          print ("The ngrams and unigrams json is ", json.loads(all_found_noneng))
+       else:
+          print (all_found_ngrams+'\n')
+          print (all_found_unigrams+'\n')
 
 
 
