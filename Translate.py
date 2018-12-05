@@ -3,6 +3,8 @@ import csv
 import re
 import json
 import nltk
+
+from nltk.sentiment.vader import SentimentIntensityAnalyzer
 from nltk.stem import PorterStemmer
 from nltk.tokenize import sent_tokenize, word_tokenize
 from fuzzywuzzy import fuzz
@@ -10,13 +12,10 @@ import gensim
 from gensim.test.utils import common_texts, get_tmpfile
 from gensim.models import Word2Vec
 from nltk.corpus import stopwords
-from ppretty import ppretty
 from Tkinter import *  
 from nltk.corpus import words
 from random import randint
-from HoverInfo import HoverInfo
 import operator
-
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -42,10 +41,9 @@ file_path = "input_text.txt"
 colors=['sea green', 'maroon3', 'light salmon', 'slate blue', 'turquoise1','RoyalBlue1', 'coral', 'khaki1','ivory3','slate grey', 'yellow2', 'red3', 'purple']
 
 
-#model1 = Word2Vec.load("saved_models/embeddings4.model")
-model2 = gensim.models.KeyedVectors.load_word2vec_format('saved_models/GoogleNews-vectors-negative300.bin', binary=True, limit=500000)
-model1 = gensim.models.KeyedVectors.load_word2vec_format('saved_models/GoogleNews-vectors-negative300.bin', binary=True, limit=500000)
-#model2 = Word2Vec.load("saved_models/embeddings5.model")
+model1 = Word2Vec.load("saved_models/embeddings4.model")
+model2 = Word2Vec.load("saved_models/embeddings5.model")
+#model2 = gensim.models.KeyedVectors.load_word2vec_format('saved_models/GoogleNews-vectors-negative300.bin', binary=True, limit=90000)
 
 class phraseLabel :
     def __init__(self, dict_term, pos, length, defin, input_term, thresh):
@@ -72,6 +70,38 @@ class Match(object):
         self.definition=definition
         self.thresh = threshold
 
+
+
+class Visual(Frame):
+    def __init__(self, *args, **kwargs):
+        Frame.__init__(self, *args, **kwargs)
+        self.t1 = Text(self, width=100, height=300)
+        self.t1.insert('1.0', texts)
+        self.t1.pack(side="left")
+        for l in all_lab:
+          newcolor = colors[randint(0,12)]
+          start ="1.0+"+str(l.pos)+"chars"
+          duration = l.pos+l.length
+          end = "1.0+"+str(duration)+"chars"
+          self.t1.tag_configure(l.dict_term, background=newcolor)
+          self.t1.tag_add(l.dict_term, start, end)
+          self.t1.tag_bind(l.dict_term,"<Button-1>", lambda event, dict_term=str(l.dict_term), thresh=str(l.thresh), defin=str(l.defin): self.on_click(dict_term, thresh, defin))     
+          self.t1.tag_bind(l.dict_term,"<Leave>", self.on_leave)
+          self.t1.tag_bind(l.dict_term,"<Enter>", self.on_enter)
+         
+        self.l2 = Label(self, text="DETAILS", width=40)
+        self.l2.pack(side="top", fill="x")
+
+    def on_click(self, dict_term, thresh, defin):
+        self.l2.configure(text='DICTIONARY: '+dict_term+'\nCONFIDENCE: '+thresh+'\nDEFINITION: '+defin) 
+
+    def on_leave(self, event):
+        self.l2.configure(text="")
+
+    def on_enter(self, event):
+        self.t1.config(cursor="arrow")
+
+
 def get_threshold (term, l):
     threshold=80
     if l ==1 and len(term) <5:
@@ -89,6 +119,7 @@ def clean_term (term):
 
 def read_file():
   with open(file_path, 'r') as ff:
+  #with open(file_path, 'r', encoding='utf-8') as ff:
     content = ff.read()
   ff.close()
   return(content)
@@ -135,6 +166,7 @@ def get_index(term, s):
 def get_dictionary_unigrams():
     dict_terms ={}
     with open(dict_path, "r") as f:
+    #with open(dict_path, "r", encoding='utf-8') as f:
          reader = csv.reader(f, delimiter='\t')
          for key,value in reader:
             dict_terms[key]=value;
@@ -193,11 +225,11 @@ def check_samelabels (new_label, labels):
 def read_dictionary():
     dict_terms ={}
     with open(dict_path, "r") as f:
+    #with open(dict_path, "r", encoding='utf-8') as f:
          reader = csv.reader(f, delimiter='\t')
          for key,value in reader:
             dict_terms[key]=value;
     f.close()
-     
     my_dict = merge_dictionary(get_dictionary_ngrams(dict_terms,4),get_dictionary_ngrams(dict_terms,3))
     my_dict = merge_dictionary(my_dict,get_dictionary_ngrams(dict_terms,2))
     return (my_dict)
@@ -213,10 +245,10 @@ def fuzzy_label(str_a, str_b, orig_str):
         test = clean_term(" ".join(splitted[i:i+l])).lower()  
         for thresh in ngram_thresholds:
           if fuzz.ratio(str_a, test)> thresh:
-            orig = orig_str.lower()
-            label = phraseLabel(str_a, texts.lower().index(test), len(test), str_b, test, thresh)
-            if check_samelabels(label, labels) == False:
-                 labels.append(label)
+             orig = orig_str.lower()
+             label = phraseLabel(str_a, texts.lower().index(test), len(test), str_b, test, thresh)
+             if check_samelabels(label, labels) == False:
+                  labels.append(label)
         i=i+1
     if (labels):
         return(labels)
@@ -229,29 +261,29 @@ def collect_ngrams(texts):
         if (labels):
             all_labels.extend(labels)
     if (all_labels):
-    	json_string = json.dumps([ob.__dict__ for ob in all_labels])
-    	return(json_string)
+      	json_string = json.dumps([ob.__dict__ for ob in all_labels])
+      	return (json_string)
     else:
         return ("There were no known ngrams in the source text.")
 
 
 def collect_unigrams(texts):
-  to_check = []
   for s in get_sentences(texts):
-    to_check=set(to_check)
-    m1_candidates=[]
-    m2_candidates=[]
     sent = remove_stopwords(s)
     try:
-        #pred1 = get_two_predictions(model1, sent)
-        #pred2 = get_two_predictions(model2, sent)
-        #common = list(set(pred1).intersection(pred2))
-        common =s[4]
-        if (to_check):
-            common.extend(to_check)
+	sent_prev = sent
+        if (sent): pred1 = get_two_predictions(model1, sent)
+	else:
+	   print ("empty sentence - moving on!")
+        if (sent_prev):pred2 = get_two_predictions(model2, sent_prev)
+        else:
+	   print ("empty sentence - moving on!")
+	print (sent, sent_prev)
+        common = list(set(pred1).intersection(pred2))
     except Exception as e:
         print ("Error in running models: ",e)
         continue;
+
     if (common):
         matches = search_dictionary(common, get_dictionary_unigrams())
     else:
@@ -261,9 +293,9 @@ def collect_unigrams(texts):
           index=get_index(m.candidate,s)
           label=phraseLabel (m.dict_term, index, len(m.candidate), m.definition, m.candidate, m.thresh )
           if check_samelabels(label, all_labels) == False:
-                 all_labels.append(label)
+              all_labels.append(label)
     else:
-        continue;
+         continue;
   if (all_labels):
       json_string = json.dumps([ob.__dict__ for ob in all_labels])
       return(json_string)
@@ -280,76 +312,50 @@ def collect_non_dict(texts):
         w=clean_term(w)   
         if is_English(w) == False:
            for key, val in terms.items():
-		threshold = get_threshold(key, 1)
- 		if fuzz.ratio(key, w) > threshold:
-		  index = [m.start() for m in re.finditer(w, texts)]
-		  for ind in index:                  
-                     label = phraseLabel(key, ind, len(w), val, w, 85)                         
-                     if check_samelabels(label, all_labels) == False:
-	             	all_labels.append(label)
+            threshold = get_threshold(key, 1)
+            if fuzz.ratio(key, w) > threshold:
+                index = [m.start() for m in re.finditer(w, texts)]
+                for ind in index:                  
+                    label = phraseLabel(key, ind, len(w), val, w, threshold)                         
+                    if check_samelabels(label, all_labels) == False:
+                        all_labels.append(label)
     if (all_labels):
-	json_string = json.dumps([ob.__dict__ for ob in all_labels])
-        return(json_string)
+     	json_string = json.dumps([ob.__dict__ for ob in all_labels])
+     	return(json_string)
     else:
       return ("No non English words were found in the dictionary ")
 
 
-texts= read_file()
-dict_grams = read_dictionary()
-all_labels = []
-
-
-all_found_ngrams = (collect_ngrams(texts))
-all_found_unigrams = (collect_unigrams(texts))
-all_found_noneng = (collect_non_dict(texts))
+def get_sentiment(sentence):
+    nltk_sentiment = SentimentIntensityAnalyzer()
+    score = nltk_sentiment.polarity_scores(sentence)
+    return score
 
 
 
+if __name__ == "__main__":
+    texts= read_file()
+    dict_grams = read_dictionary()
+    all_labels = []
+    all_found_ngrams = (collect_ngrams(texts))
+    all_found_unigrams = (collect_unigrams(texts))
+    all_found_noneng = (collect_non_dict(texts))
+    all_labels.sort(key=operator.attrgetter("pos"),reverse=False)
 
-all_labels.sort(key=operator.attrgetter("pos"),reverse=False)
+    if all_labels:
+      all_lab = sorted(all_labels, key=lambda l: l.pos, reverse=True)
+    if (all_found_unigrams!='There were no unigrams in the source text.'):
+      print ("The ngrams and unigrams json is ", json.loads(all_found_noneng))
+    else:
+      print (all_found_ngrams+'\n')
+      print (all_found_unigrams+'\n')
+    
 
+    root = Tk()
+    root.geometry('1200x700')
+    Visual(root).pack(side="top", fill="both", expand="true")
+    root.mainloop()
 
-def click(self, event):
-    # get the index of the mouse click
-    index = self.MT.index("@%s,%s" % (event.x, event.y))
-
-        # get the indices of all "adj" tags
-    tag_indices = list(self.MT.tag_ranges('adj'))
-
-        # iterate them pairwise (start and end index)
-    for start, end in zip(tag_indices[0::2], tag_indices[1::2]):
-        # check if the tag matches the mouse click index
-        if self.MT.compare(start, '<=', index) and self.MT.compare(index, '<', end):
-            # return string between tag start and end
-            return (start, end, self.MT.get(start, end))
-
-
-if all_labels:
-   all_lab = sorted(all_labels, key=lambda l: l.pos, reverse=True)
-   if (all_found_ngrams !='There were no known ngrams in the source text.'):
-      print ("The ngrams json is ", json.loads(all_found_ngrams))
-   if (all_found_unigrams!='There were no unigrams in the source text.'):
-      print ("The unigrams json is ", json.loads(all_found_unigrams))
-   window = Tk()
-   window.geometry('1100x600')
-   text = Text(window, width=100, height=300)
-   text.insert('1.0', texts)
-   text.pack(side="left") 
-   for l in all_lab:
-      newcolor = colors[randint(0,12)]
-      start ="1.0+"+str(l.pos)+"chars"
-      duration = l.pos+l.length
-      end = "1.0+"+str(duration)+"chars"
-      text.tag_configure("highlight", background=newcolor)
-      text.tag_add("highlight",start, end)
-      bu1=Button(window, text='TERM: <'+str(l.input_term)+'> at POSITION: <'+str(l.pos)+'>', width=10, bg=newcolor, fg='black')
-      lstring = 'DICTIONARY: '+str(l.dict_term)+'\nCONFIDENCE: '+str(l.thresh)+'\nDEFINITION: '+str(l.defin) 
-      bu1.submitButton =  HoverInfo(bu1, lstring)  
-      bu1.pack(fill=X, pady=7, padx=2)
-   window.mainloop()
-else:
-   print (all_found_ngrams+'\n')
-   print (all_found_unigrams+'\n')
 
 
 
