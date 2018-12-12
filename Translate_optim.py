@@ -18,15 +18,15 @@ from tkinter import *
 from nltk.corpus import words
 from random import randint
 import operator
+import time
 
-ngram_thresholds =[82, 87]
+nltk_sentiment = SentimentIntensityAnalyzer()
+ngram_thresholds =[85]
 uni_terms ={}
 bi_terms = {}
 tri_terms = {}
 quad_terms = {}
 dict_path = "C:\develop\DataScienceMaster\Translate\data\dictionary.tsv"
-
-
 
 symb_pattern = r'[\<\>\{\}\.\,\!\?\"\n$]+'
 punc_pattern = r'[\S\t\r]+'
@@ -36,7 +36,7 @@ trigram_pattern=r'^[a-zA-Z0-9\']+\s[a-zA-Z0-9\']+\s[a-zA-Z0-9\']+$'
 quadgram_pattern=r'^[a-zA-Z0-9\']+\s[a-zA-Z0-9\']+\s[a-zA-Z0-9\']+\s[a-zA-Z0-9\']+$'
 stops= set(stopwords.words('english'))
 colors=['sea green', 'maroon3', 'light salmon', 'slate blue', 'turquoise1','RoyalBlue1', 'coral', 'khaki1','ivory3','slate grey', 'yellow2', 'red3', 'purple']
-colors={'neg':'red3','pos':'green','neu':'light blue', 'None':'yellow'}
+colors={'neg':'red3','pos':'green','neu':'light blue', 'compound':'orange', 'None':'yellow'}
 model1 = Word2Vec.load("saved_models/embeddings4.model")
 model2 = Word2Vec.load("saved_models/embeddings5.model")
 engs = words.words()+list(stops)
@@ -56,7 +56,7 @@ class phraseLabel :
         self.thresh = thresh
     
     def __eq__(self, other):
-        return (self.dict_term == other.dict_term and self.position == other.position and self.thresh == other.thresh and self.position != -1)
+        return (self.dict_term == other.dict_term and self.position == other.position and self.position != -1)
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -64,12 +64,6 @@ class phraseLabel :
     def __hash__ (self):
          return hash((self.label,self.position))
 
-class Match(object):
-    def __init__(self, candidate, dict_term, definition, threshold):
-        self.candidate=candidate
-        self.dict_term=dict_term
-        self.definition=definition
-        self.thresh = threshold
 
 class Visual(Frame):
     def __init__(self, *args, **kwargs):
@@ -79,12 +73,12 @@ class Visual(Frame):
         self.t1.insert('1.0', texts)
         self.t1.pack(side="left")
         for l in all_lab:
-          #newcolor = colors[randint(0,12)]
           start ="1.0+"+str(l.position)+"chars"
           duration = l.position+l.length
           end = "1.0+"+str(duration)+"chars"
           self.t1.tag_configure(l.dict_term, background=colors[str(l.emot)])
           self.t1.tag_add(l.dict_term, start, end)
+          print (l.input_term, l.position)
           self.t1.tag_bind(l.dict_term,"<Button-1>", lambda event, dict_term=str(l.dict_term), thresh=str(l.thresh), defin=str(l.defin), position=str(l.position), emot= str(l.emot): self.on_click(dict_term, thresh, defin, position, emot))     
           self.t1.tag_bind(l.dict_term,"<Leave>", self.on_leave)
           self.t1.tag_bind(l.dict_term,"<Enter>", self.on_enter)
@@ -117,7 +111,6 @@ def clean_term (term):
     return (re.sub(symb_pattern,'',term))
 
 def read_file(file_path):
-  #with open(file_path, 'r') as ff:
   with open(file_path, 'r', encoding='utf-8', errors="ignore") as ff:
     content = ff.read()
   ff.close()
@@ -248,15 +241,6 @@ def check_phrase_candidate(phrase, texts):
    return(False)
 
 
-def get_parent_sentiment(term, text_portion):
-  #given a ngram term, return the dominant sentiment of parent sentence
-  group = str(" ".join(text_portion))
-  emot_dict = get_sentiments(group)   
-  max_emot = max(emot_dict.items(), key=operator.itemgetter(1))[0]
-  if (max_emot):
-           return (max_emot)
-  else:
-     return(None)
 
 def substring_indexes(substring, string):
     last_found = -1 
@@ -283,7 +267,7 @@ def collect_ngrams(orig_str):
               defin = grams[g][found]	     
               indexes = list(substring_indexes(test, orig_str))
               for ind in indexes:
-                emot = get_parent_sentiment (test, orig_str[ind-20:ind+20])
+                emot = get_sentiment(orig_str[ind-20:ind+20])
        	        label = phraseLabel(x[0], ind, len(test), defin, test, emot, thresh)
        	        if check_samelabels(label, all_labels) == False:
                   all_labels.append(label)
@@ -294,14 +278,23 @@ def collect_ngrams(orig_str):
     else:
         return ("There were no known ngrams in the source text.")
 
+def find_all(a_str, sub):
+    start = 0
+    while True:
+        start = a_str.find(sub, start)
+        if start == -1: return
+        yield start
+        start += len(sub) # use start += 1 to find overlapping matches
 
 def collect_unigrams(texts):
   choices = list(uni_terms)
   for s in get_sentences(texts):
     sent = remove_stopwords(s)
     sent_prev = sent
-    if len(sent) < 6:
-       common = [model1.wv.doesnt_match(sent)]
+    if len(sent) < 3:
+        continue;
+    elif (len(sent) < 6 and len(sent) > 1):
+       common = [model2.wv.doesnt_match(sent)]
     else:
        try:
            pred1 = get_two_predictions(model1, sent)
@@ -316,7 +309,7 @@ def collect_unigrams(texts):
               defin = uni_terms[c]
               thresh = 100
               i = get_index(c, s)
-              emot = get_parent_sentiment (c, texts[i-20:i+20])
+              emot = get_sentiment (s)
               label=phraseLabel (c, i, len(c), defin, c, emot, thresh)
               if check_samelabels(label, all_labels) == False:
                      all_labels.append(label)
@@ -324,13 +317,12 @@ def collect_unigrams(texts):
               thresh = get_threshold(c)
               x = process.extractOne(c, choices, scorer=fuzz.ratio, score_cutoff = thresh )
               if (x):
-                  print ('ji')
                   defin = uni_terms[x[0]]
                   i = get_index(c, s)
-                  emot = get_parent_sentiment (c, texts[i-20:i+20])
+                  emot = get_sentiment (s)
                   label=phraseLabel (x[0], i, len(c), defin, c, emot, thresh)
                   if check_samelabels(label, all_labels) == False:
-                     all_labels.append(label)
+                      all_labels.append(label)
     else:
         continue
 
@@ -353,9 +345,9 @@ def collect_non_dict(texts):
           thresh = get_threshold(w) 
           x = process.extractOne(w, choices, scorer=fuzz.ratio, score_cutoff = thresh )
           if (x): # found the non English word in our dictionary
-             index = [m.start() for m in re.finditer(w, texts)]
+             indexs = list(find_all(texts, w))
              defin = uni_terms[x[0]]
-             for ind in index:                  
+             for ind in indexs:                  
                 emot = get_parent_sentiment(w, splitted[i-6:i+6])
                 label = phraseLabel(x[0], ind, len(w), defin, w, emot, thresh)                         
                 if check_samelabels(label, all_labels) == False:
@@ -367,28 +359,71 @@ def collect_non_dict(texts):
       return ("No non English words were found in the dictionary ")
 
 
-def get_sentiments(sentence):
-    # returns the three dimensions of sentiment intensity
-    nltk_sentiment = SentimentIntensityAnalyzer()
+def collect_non_dict2(texts):
+    choices = list(uni_terms)
+    splitted = set(re.findall(punc_pattern, texts))
+    found = list (splitted-(set(engs)))
+    for f in found:
+        thresh = get_threshold(f)
+        x = process.extractOne(f, choices, scorer=fuzz.ratio, score_cutoff =thresh)
+        if (x):
+            indexes = list(find_all(texts, f))
+            defin = uni_terms[x[0]]
+            for ind in indexes:                  
+                emot = get_sentiment(texts[ind-20:ind+20])
+                label = phraseLabel(x[0], ind, len(f), defin, f, emot, thresh)                         
+                if check_samelabels(label, all_labels) == False:
+                     all_labels.append(label)
+    if (all_labels):
+     	json_string = json.dumps([ob.__dict__ for ob in all_labels])
+     	return(json_string)
+    else:
+      return ("No non English words were found in the dictionary ")
+
+
+def get_sentiment(sentence):
     score = nltk_sentiment.polarity_scores(sentence)
+    max_emot = max(score.items(), key=operator.itemgetter(1))[0]
+    if (max_emot):
+       return (max_emot)
+    else:
+       return(None)
+
+
     return score
 
 
 
 if __name__ == "__main__":
     import sys    
+
     try:
         filename = str(sys.argv[1])
     except:
         print ("Please provide the path of a text file for input")
         exit()
-    texts= read_file(filename)
-    get_dictionary_grams()
-    all_labels = []
-    all_found_ngrams = (collect_ngrams(texts))
-    #all_found_unigrams = (collect_unigrams(texts))
-    all_found_noneng = (collect_non_dict(texts))
 
+    all_labels = []
+    texts= read_file(filename)
+    startTime = time.time()
+    get_dictionary_grams()
+    dict_time = time.time() - startTime
+    print ('DICTIONARY_TIME', dict_time)
+    
+    startTime = time.time()
+    all_found_ngrams = (collect_ngrams(texts))
+    ngram_time = time.time() - startTime
+    print ('NGRAM_TIME', ngram_time)
+    
+    startTime = time.time()
+    all_found_unigrams = (collect_unigrams(texts))
+    unigram_time = time.time() - startTime
+    print ('UNIGRAM_TIME', unigram_time)
+    startTime = time.time()
+    all_found_noneng = (collect_non_dict2(texts))
+    noneng_time = time.time() - startTime
+    print ('NONENG_TIME', noneng_time)
+    
     all_labels.sort(key=operator.attrgetter("position"),reverse=False)
 
     #if the slang is less than 3% it's not useful
