@@ -35,7 +35,6 @@ bigram_pattern=r'^[a-zA-Z0-9\'\-]+\s|\-[a-zA-Z0-9\'\-]+$'
 trigram_pattern=r'^[a-zA-Z0-9\']+\s[a-zA-Z0-9\']+\s[a-zA-Z0-9\']+$'
 quadgram_pattern=r'^[a-zA-Z0-9\']+\s[a-zA-Z0-9\']+\s[a-zA-Z0-9\']+\s[a-zA-Z0-9\']+$'
 stops= set(stopwords.words('english'))
-colors=['sea green', 'maroon3', 'light salmon', 'slate blue', 'turquoise1','RoyalBlue1', 'coral', 'khaki1','ivory3','slate grey', 'yellow2', 'red3', 'purple']
 colors={'neg':'red3','pos':'green','neu':'light blue', 'compound':'orange', 'None':'yellow'}
 model1 = Word2Vec.load("saved_models/embeddings4.model")
 model2 = Word2Vec.load("saved_models/embeddings5.model")
