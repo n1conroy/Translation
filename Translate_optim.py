@@ -8,27 +8,27 @@ import json
 import nltk
 import gensim
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
-from nltk.stem import PorterStemmer
 from nltk.tokenize import sent_tokenize, word_tokenize
 from fuzzywuzzy import process, fuzz
-from gensim.test.utils import common_texts, get_tmpfile
 from gensim.models import Word2Vec
 from nltk.corpus import stopwords
 from tkinter import *  
 from nltk.corpus import words
-from random import randint
+from itertools import tee, islice
+from difflib import SequenceMatcher
 import operator
 import time
 
 nltk_sentiment = SentimentIntensityAnalyzer()
-ngram_thresholds =[85]
+ngram_threshold =85
 uni_terms ={}
 bi_terms = {}
 tri_terms = {}
 quad_terms = {}
 dict_path = "C:\develop\DataScienceMaster\Translate\data\dictionary.tsv"
 
-symb_pattern = r'[\<\>\{\}\.\,\!\?\"\n$]+'
+symb_pattern = r'[\/\'\:\[\]\(\)\-\+\<\>\{\}\.\,\!\?\"\n$]+'
+
 punc_pattern = r'[\S\t\r]+'
 unigram_pattern= r'^[a-zA-Z0-9\-\']+$'
 bigram_pattern=r'^[a-zA-Z0-9\'\-]+\s[a-zA-Z0-9\'\-]+$'
@@ -41,7 +41,7 @@ model1 = Word2Vec.load("saved_models/embeddings4.model")
 model2 = Word2Vec.load("saved_models/embeddings5.model")
 engs = words.words()+list(stops)
 
-unigram_thresholds = {1:100, 2:100, 3:97, 4:95, 5:91, 6:86, 7:82, 8:80, 9:79, 10:77, 11:75, 12:74, 13:73}
+unigram_thresholds = {1:100, 2:100, 3:97, 4:95, 5:91, 6:86, 7:85, 8:83, 9:81, 10:79, 11:78, 12:77, 13:76}
 
 #model1 = gensim.models.KeyedVectors.load_word2vec_format('saved_models/embeddings6-vectors-negative300.bin', binary=True, limit=50000)
 
@@ -78,7 +78,6 @@ class Visual(Frame):
           end = "1.0+"+str(duration)+"chars"
           self.t1.tag_configure(l.dict_term, background=colors[str(l.emot)])
           self.t1.tag_add(l.dict_term, start, end)
-          print (l.input_term, l.position)
           self.t1.tag_bind(l.dict_term,"<Button-1>", lambda event, dict_term=str(l.dict_term), thresh=str(l.thresh), defin=str(l.defin), position=str(l.position), emot= str(l.emot): self.on_click(dict_term, thresh, defin, position, emot))     
           self.t1.tag_bind(l.dict_term,"<Leave>", self.on_leave)
           self.t1.tag_bind(l.dict_term,"<Enter>", self.on_enter)
@@ -124,19 +123,11 @@ def remove_stopwords(content):
          filtered_sentence.append(w)
 
    return(filtered_sentence)
-
-def is_English(word):
-    t = clean_term(word.lower())
-    if t in engs:
-       return(True)
-    else:
-       return(False)
-        
+       
 
 def get_sentences(content): 
    natural_count = nltk.sent_tokenize(content)
    if (len(natural_count) < 3):
-     #return content.split('\n')
      return (natural_count)
    else:
      return (natural_count)
@@ -153,7 +144,6 @@ def get_index(term, s):
 
 def get_dictionary_unigrams():
     dict_terms ={}
-    #with open(dict_path, "r") as f:
     with open(dict_path, "r", encoding='utf-8') as f:
          reader = csv.reader(f, delimiter='\t')
          for key,value in reader:
@@ -250,51 +240,64 @@ def substring_indexes(substring, string):
             break  
         yield last_found
 
-def collect_ngrams(orig_str):
-    grams = {2:bi_terms, 3:tri_terms, 4:quad_terms}
-    orig = orig_str.lower()
-    splitted = re.findall(punc_pattern, orig_str) 
-    for g in grams.keys():
-      i=0
-      extent = (len(splitted)-g+1)
-      choices = list(grams[g])
-      while (i < extent):
-        test = clean_term(" ".join(splitted[i:i+g])).lower()  
-        for thresh in ngram_thresholds:
-            x= (process.extractOne (test, choices, scorer=fuzz.ratio, score_cutoff = thresh))
-            if (x):
-              found = x[0]
-              defin = grams[g][found]	     
-              indexes = list(substring_indexes(test, orig_str))
-              for ind in indexes:
-                emot = get_sentiment(orig_str[ind-20:ind+20])
-       	        label = phraseLabel(x[0], ind, len(test), defin, test, emot, thresh)
-       	        if check_samelabels(label, all_labels) == False:
-                  all_labels.append(label)
-        i=i+1
-    if (all_labels):
-      	json_string = json.dumps([ob.__dict__ for ob in all_labels])
-      	return (json_string)
+def ngrams(lst, n):
+  tlst = lst
+  while True:
+    a, b = tee(tlst)
+    l = tuple(islice(a, n))
+    if len(l) == n:
+        yield " ".join(l)
+        next(b)
+        tlst = b
     else:
-        return ("There were no known ngrams in the source text.")
+      break
 
+
+def collect_ngrams2(orig_str):
+  grams = {2:bi_terms, 3:tri_terms, 4:quad_terms} 
+  sents = get_sentences (texts)
+  fuzzy_grams = []
+  for s in sents:
+      words = re.findall("\w+", s)
+      for gk, gv in grams.items():
+        choices = set(gv.keys())
+        my_grams = ngrams(words, gk)
+        
+        blah = (set(my_grams).intersection(choices))
+        for b in blah:
+          if (b):
+            indexes = list(substring_indexes(b, orig_str))
+            defin = gv[b]
+            for ind in indexes:
+              emot = get_sentiment(orig_str[ind-20: ind+20])
+              label = phraseLabel(b, ind, len(b), defin, b, emot, ngram_threshold)
+              if check_samelabels(label, all_labels) == False:
+                   all_labels.append(label)
+  if (all_labels):
+      json_string = json.dumps([ob.__dict__ for ob in all_labels])
+      return (json_string)
+  else:
+      return ("There were no known ngrams in the source text.") 
+            
 def find_all(a_str, sub):
     start = 0
     while True:
-        start = a_str.find(sub, start)
+        start = a_str.find(' '+sub+' ', start)
         if start == -1: return
-        yield start
+        yield start+1
         start += len(sub) # use start += 1 to find overlapping matches
 
 def collect_unigrams(texts):
   choices = list(uni_terms)
   for s in get_sentences(texts):
-    sent = remove_stopwords(s)
+    sent = remove_stopwords(clean_term(s))
     sent_prev = sent
-    if len(sent) < 3:
-        continue;
-    elif (len(sent) < 6 and len(sent) > 1):
-       common = [model2.wv.doesnt_match(sent)]
+    if len(sent) < 4:
+       try:
+           common = [model1.wv.doesnt_match(sent)]
+       except Exception as e:
+           print ("Error with single model ",e, sent)
+           continue;
     else:
        try:
            pred1 = get_two_predictions(model1, sent)
@@ -324,9 +327,7 @@ def collect_unigrams(texts):
                   if check_samelabels(label, all_labels) == False:
                       all_labels.append(label)
     else:
-        continue
-
-
+        continue;
   if (all_labels):
       json_string = json.dumps([ob.__dict__ for ob in all_labels])
       return(json_string)
@@ -334,46 +335,24 @@ def collect_unigrams(texts):
       return ("There were no unigrams in the source text.")
 
 
-def collect_non_dict(texts):
-    choices = list(uni_terms)
-    i=0
-    splitted = re.findall(punc_pattern,texts) 
-    for w in splitted: 
-       i = i+1   
-       w=clean_term(w)   
-       if is_English(w) == False:
-          thresh = get_threshold(w) 
-          x = process.extractOne(w, choices, scorer=fuzz.ratio, score_cutoff = thresh )
-          if (x): # found the non English word in our dictionary
-             indexs = list(find_all(texts, w))
-             defin = uni_terms[x[0]]
-             for ind in indexs:                  
-                emot = get_parent_sentiment(w, splitted[i-6:i+6])
-                label = phraseLabel(x[0], ind, len(w), defin, w, emot, thresh)                         
-                if check_samelabels(label, all_labels) == False:
-                     all_labels.append(label)
-    if (all_labels):
-     	json_string = json.dumps([ob.__dict__ for ob in all_labels])
-     	return(json_string)
-    else:
-      return ("No non English words were found in the dictionary ")
-
-
 def collect_non_dict2(texts):
     choices = list(uni_terms)
-    splitted = set(re.findall(punc_pattern, texts))
-    found = list (splitted-(set(engs)))
+    splitted = re.findall(punc_pattern, texts)
+    splitted = re.sub(symb_pattern, '', str(splitted)).lower().split()
+    #get the compliment of the all text and known quoteunquote english words (by python standards)
+    found = list(set(splitted)-(set(engs)))
     for f in found:
-        thresh = get_threshold(f)
-        x = process.extractOne(f, choices, scorer=fuzz.ratio, score_cutoff =thresh)
-        if (x):
-            indexes = list(find_all(texts, f))
-            defin = uni_terms[x[0]]
-            for ind in indexes:                  
-                emot = get_sentiment(texts[ind-20:ind+20])
-                label = phraseLabel(x[0], ind, len(f), defin, f, emot, thresh)                         
-                if check_samelabels(label, all_labels) == False:
-                     all_labels.append(label)
+      thresh = get_threshold(f)
+      x = process.extractOne(f, choices, scorer=fuzz.ratio, score_cutoff =thresh)
+      if (x):
+          print (x)
+          indexes = list(find_all(texts, f))
+          defin = uni_terms[x[0]]
+          for ind in indexes:                  
+              emot = get_sentiment(texts[ind-20:ind+20])
+              label = phraseLabel(x[0], ind, len(f), defin, f, emot, thresh)                         
+              if check_samelabels(label, all_labels) == False:
+                   all_labels.append(label)
     if (all_labels):
      	json_string = json.dumps([ob.__dict__ for ob in all_labels])
      	return(json_string)
@@ -388,30 +367,25 @@ def get_sentiment(sentence):
        return (max_emot)
     else:
        return(None)
-
-
     return score
-
-
 
 if __name__ == "__main__":
     import sys    
-
     try:
         filename = str(sys.argv[1])
     except:
         print ("Please provide the path of a text file for input")
         exit()
-
     all_labels = []
     texts= read_file(filename)
+
     startTime = time.time()
     get_dictionary_grams()
     dict_time = time.time() - startTime
     print ('DICTIONARY_TIME', dict_time)
     
     startTime = time.time()
-    all_found_ngrams = (collect_ngrams(texts))
+    collect_ngrams2(texts)
     ngram_time = time.time() - startTime
     print ('NGRAM_TIME', ngram_time)
     
@@ -419,6 +393,7 @@ if __name__ == "__main__":
     all_found_unigrams = (collect_unigrams(texts))
     unigram_time = time.time() - startTime
     print ('UNIGRAM_TIME', unigram_time)
+    
     startTime = time.time()
     all_found_noneng = (collect_non_dict2(texts))
     noneng_time = time.time() - startTime
@@ -427,7 +402,7 @@ if __name__ == "__main__":
     all_labels.sort(key=operator.attrgetter("position"),reverse=False)
 
     #if the slang is less than 3% it's not useful
-    if (len (all_labels)/len(texts.split(' ')) < 0.03): 
+    if (len (all_labels)/len(texts.split(' ')) < 0.0000000000003): 
        all_labels=[]
        print ("We found no significant slang to report")
     else:
@@ -442,3 +417,4 @@ if __name__ == "__main__":
        else:
           print (all_found_ngrams+'\n')
           print (all_found_unigrams+'\n')
+     
