@@ -27,11 +27,11 @@ tri_terms = {}
 quad_terms = {}
 dict_path = "C:\develop\DataScienceMaster\Translate\data\dictionary.tsv"
 
-symb_pattern = r'[\/\'\:\[\]\(\)\-\+\<\>\{\}\.\,\!\?\"\n$]+'
+symb_pattern = r'[\/\'\:\[\]\(\)\+\<\>\{\}\.\,\!\?\"\n$]+'
 
 punc_pattern = r'[\S\t\r]+'
 unigram_pattern= r'^[a-zA-Z0-9\-\']+$'
-bigram_pattern=r'^[a-zA-Z0-9\'\-]+\s[a-zA-Z0-9\'\-]+$'
+bigram_pattern=r'^[a-zA-Z0-9\'\-]+\s|\-[a-zA-Z0-9\'\-]+$'
 trigram_pattern=r'^[a-zA-Z0-9\']+\s[a-zA-Z0-9\']+\s[a-zA-Z0-9\']+$'
 quadgram_pattern=r'^[a-zA-Z0-9\']+\s[a-zA-Z0-9\']+\s[a-zA-Z0-9\']+\s[a-zA-Z0-9\']+$'
 stops= set(stopwords.words('english'))
@@ -41,7 +41,7 @@ model1 = Word2Vec.load("saved_models/embeddings4.model")
 model2 = Word2Vec.load("saved_models/embeddings5.model")
 engs = words.words()+list(stops)
 
-unigram_thresholds = {1:100, 2:100, 3:97, 4:95, 5:91, 6:86, 7:85, 8:83, 9:81, 10:79, 11:78, 12:77, 13:76}
+unigram_thresholds = {1:100, 2:100, 3:97, 4:95, 5:91, 6:86, 7:85, 8:75, 9:75, 10:79, 11:78, 12:77, 13:76}
 
 #model1 = gensim.models.KeyedVectors.load_word2vec_format('saved_models/embeddings6-vectors-negative300.bin', binary=True, limit=50000)
 
@@ -269,7 +269,7 @@ def collect_ngrams2(orig_str):
             indexes = list(substring_indexes(b, orig_str))
             defin = gv[b]
             for ind in indexes:
-              emot = get_sentiment(orig_str[ind-20: ind+20])
+              emot = get_sentiment(orig_str[ind-40: ind+40])
               label = phraseLabel(b, ind, len(b), defin, b, emot, ngram_threshold)
               if check_samelabels(label, all_labels) == False:
                    all_labels.append(label)
@@ -341,6 +341,7 @@ def collect_non_dict2(texts):
     splitted = re.sub(symb_pattern, '', str(splitted)).lower().split()
     #get the compliment of the all text and known quoteunquote english words (by python standards)
     found = list(set(splitted)-(set(engs)))
+    print (found)
     for f in found:
       thresh = get_threshold(f)
       x = process.extractOne(f, choices, scorer=fuzz.ratio, score_cutoff =thresh)
